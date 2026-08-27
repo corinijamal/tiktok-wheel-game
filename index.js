@@ -6,20 +6,24 @@ const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
-// تحديث السطر لفتح الأمان وتفعيل استقبال أوامر الأزرار
+
+// 🛠️ الحل البرمجي: فتح الـ CORS والمنافذ بالكامل لمتصفحات الهاتف والمنصات العالمية
 const io = new Server(server, {
     cors: {
         origin: "*",
-        methods: ["GET", "POST"]
-    }
+        methods: ["GET", "POST"],
+        credentials: true
+    },
+    allowEIO3: true // دعم التوافق مع إصدارات المتصفحات المختلفة
 });
 
+// ضع هنا اسم الحساب الذي ترغب بسحب بياناته (بدون علامة @)
+const TARGET_USERNAME = "a_7_m_d2"; 
 
-const TARGET_USERNAME = "ar_gamer_ar"; // اسم الحساب
-let isJoinOpen = false; // حالة استقبال المنضمين
-const joinedUsers = new Set(); // لتفادي تكرار نفس الشخص
+let isJoinOpen = false; 
+const joinedUsers = new Set(); 
 
-// تقديم ملفات الواجهة
+// تقديم ملفات الواجهة الرسومية من مجلد public
 app.use(express.static(path.join(__dirname, 'public')));
 
 let tiktokConnection = new TikTokLiveConnection(TARGET_USERNAME, {
@@ -27,77 +31,86 @@ let tiktokConnection = new TikTokLiveConnection(TARGET_USERNAME, {
     websocketOptions: { timeout: 10000 }
 });
 
-// استقبال الأوامر من صفحة الويب (صاحب البث)
+// إدارة الاتصال وتبادل الأوامر مع لوحة تحكم المتصفح (WebSockets)
 io.on('connection', (socket) => {
-    // إرسال الحالة الحالية واللاعبين عند فتح الصفحة
+    console.log('📶 متصفح جديد اتصل بلوحة التحكم بنجاح!');
+    
+    // مزامنة فورية بمجرد تحميل الصفحة تضمن استجابة الشاشات والأزرار
     socket.emit('syncState', { isJoinOpen, users: Array.from(joinedUsers) });
 
-    // أمر تغيير حالة الانضمام
     socket.on('toggleJoin', (status) => {
         isJoinOpen = status;
-        if (!isJoinOpen) processedMessages.clear(); // تنظيف المؤقت
         io.emit('joinStatusChanged', isJoinOpen);
-        console.log(`[System]: الانضمام الآن: ${isJoinOpen ? 'مفتوح' : 'مغلق'}`);
+        console.log(`[System]: وضع استقبال اللاعبين الآن: ${isJoinOpen ? 'مفتوح' : 'مغلق'}`);
     });
 
-    // إدارة الأسماء يدوياً من لوحة التحكم
     socket.on('adminAddUser', (name) => {
         if (name && !joinedUsers.has(name)) {
             joinedUsers.add(name);
             io.emit('updateUsers', Array.from(joinedUsers));
+            console.log(`👤 تم إضافة لاعب يدوياً من الإدارة: ${name}`);
         }
     });
 
     socket.on('adminRemoveUser', (name) => {
         joinedUsers.delete(name);
         io.emit('updateUsers', Array.from(joinedUsers));
+        console.log(`❌ تم حذف لاعب من الإدارة: ${name}`);
     });
 
     socket.on('adminClearAll', () => {
         joinedUsers.clear();
         io.emit('updateUsers', Array.from(joinedUsers));
+        console.log(`🗑️ تم تفريغ قائمة اللاعبين بالكامل.`);
     });
 });
 
 const processedMessages = new Set();
 
-// الاستماع لتعليقات تيك توك
+// الاستماع لتعليقات بث تيك توك المباشر في الوقت الفعلي
 tiktokConnection.on('chat', (data) => {
-    if (!isJoinOpen) return; // تجاهل التعليقات إذا كان التسجيل مغلقاً
+    if (!isJoinOpen) return; // تجاهل التعليقات إذا كان التسجيل مغلقاً في المتصفح
 
     if (data) {
         const msgId = data.msgId || (data.msg && data.msg.id);
         if (msgId && processedMessages.has(msgId)) return;
         if (msgId) processedMessages.add(msgId);
 
+        const username = data.uniqueId || (data.user && (data.user.displayId || data.user.uniqueId)) || 'unknown';
         const nickname = data.nickname || (data.user && data.user.nickname) || 'unknown';
         const comment = (data.comment || data.text || data.content || '').trim();
 
-        // فحص إذا كتب الكلمة المفتاحية "انضم" ولم يسجل مسبقاً
+        // فحص الكلمة المفتاحية "انضم"
         if (comment === 'انضم' || comment.toLowerCase() === 'انضم') {
             if (!joinedUsers.has(nickname)) {
                 joinedUsers.add(nickname);
-                console.log(`➕ لاعب جديد انضم: ${nickname}`);
-                // إرسال الاسم فوراً للواجهة رسومياً
+                console.log(`➕ لاعب جديد انضم للبث: ${nickname} (@${username})`);
                 io.emit('updateUsers', Array.from(joinedUsers));
             }
         }
     }
 });
 
-// تشغيل الفحص والاتصال التلقائي
-async function runServer() {
-    try {
-        await tiktokConnection.waitUntilLive(30);
-        await tiktokConnection.connect();
-        console.log('✅ متصل بنجاح ببث تيك توك!');
-    } catch (e) {
-        setTimeout(runServer, 30000);
-    }
+// إطلاق دالة الاتصال بالخلفية صامتة دون حظر الأزرار (Non-blocking)
+function runServer() {
+    console.log('🔄 جاري فحص حالة البث في الخلفية دون حظر خادم الويب...');
+    tiktokConnection.waitUntilLive(30)
+        .then(() => {
+            console.log('🚀 الحساب نشط الآن! جاري بدء الاتصال...');
+            return tiktokConnection.connect();
+        })
+        .then(() => {
+            console.log('✅ متصل بنجاح ببث تيك توك!');
+        })
+        .catch((err) => {
+            console.error('❌ تنبيه في الخلفية (سيتم إعادة المحاولة تلقائياً):', err.toString());
+            setTimeout(runServer, 30000);
+        });
 }
 
-// تشغيل خادم الويب على المنفذ 3000
-server.listen(3000, () => {
-    console.log('🚀 موقع عجلة الحظ جاهز ومتاح على الرابط: http://localhost:3000');
-    runServer();
+// تشغيل خادم الويب على المنفذ المتغير المعتمد لدى منصات الاستضافة (Render)
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+    console.log(`🚀 السيرفر يعمل وجاهز ومستقر تماماً على المنفذ: ${PORT}`);
+    runServer(); 
 });
