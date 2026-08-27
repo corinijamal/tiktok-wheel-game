@@ -76,7 +76,8 @@
 </div>
 <script>
     // الاتصال التلقائي بـ Render عبر النطاق الافتراضي للموقع
-    const socket = io();
+    const socket = io("https://onrender.com", { transports: ['websocket', 'polling'], upgrade: false });
+
     let players = [];
     let selectedWinner = "";
     
