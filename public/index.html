@@ -74,7 +74,6 @@
     <br>
     <button class="btn-close" style="width: 100%;" onclick="closePlayerManager()">إغلاق</button>
 </div>
-
 <script>
     // الاتصال التلقائي بـ Render عبر النطاق الافتراضي للموقع
     const socket = io();
@@ -216,3 +215,38 @@
             let currentSegment = Math.floor((currentAngle % (2 * Math.PI)) / arcSize);
             if(currentSegment !== lastSegmentIndex && progress < 0.9) {
                 playTickSound();
+                lastSegmentIndex = currentSegment;
+            }
+
+            if (progress < 1) {
+                requestAnimationFrame(animateSpin);
+            } else {
+                let normalizedAngle = (currentAngle - (Math.PI / 2)) % (2 * Math.PI);
+                if (normalizedAngle < 0) normalizedAngle += 2 * Math.PI;
+                const winnerIndex = players.length - 1 - Math.floor(normalizedAngle / arcSize);
+                selectedWinner = players[winnerIndex % players.length];
+                showWinner(selectedWinner);
+            }
+        }
+        requestAnimationFrame(animateSpin);
+    }
+
+    function showWinner(name) {
+        document.getElementById('winnerName').innerText = name;
+        document.getElementById('resultModal').style.display = 'block';
+        document.getElementById('overlay').style.display = 'block';
+        document.getElementById('spinBtn').disabled = false;
+    }
+
+    function closeModal() {
+        document.getElementById('resultModal').style.display = 'none';
+        document.getElementById('overlay').style.display = 'none';
+    }
+
+    function eliminateWinner() {
+        removePlayer(selectedWinner);
+        closeModal();
+    }
+</script>
+</body>
+</html>
