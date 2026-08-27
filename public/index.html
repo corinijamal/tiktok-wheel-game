@@ -1,109 +1,218 @@
-const { TikTokLiveConnection } = require('tiktok-live-connector');
-const express = require('express');
-const http = require('http');
-const { Server } = require('socket.io');
-const path = require('path');
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>عجلة حظ البث المباشر</title>
+    <!-- استدعاء مكتبة Socket.io من رابط CDN عالمي لضمان عمل الأزرار أونلاين -->
+    <script src="https://socket.io"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #121214; color: #fff; text-align: center; margin: 0; padding: 20px; }
+        .container { display: flex; flex-direction: column; align-items: center; gap: 20px; max-width: 800px; margin: auto; }
+        .controls { display: flex; gap: 15px; background: #1a1a1e; padding: 15px; border-radius: 12px; width: 100%; justify-content: center; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+        button { padding: 12px 24px; font-size: 16px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; transition: 0.3s; }
+        .btn-open { background: #22c55e; color: white; }
+        .btn-close { background: #ef4444; color: white; }
+        .btn-spin { background: #a855f7; color: white; width: 200px; font-size: 20px; box-shadow: 0 0 15px #a855f7; }
+        .btn-view { background: #3b82f6; color: white; }
+        .wheel-container { position: relative; margin: 30px 0; }
+        .pointer { position: absolute; top: -15px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 15px solid transparent; border-right: 15px solid transparent; border-top: 30px solid #ef4444; z-index: 10; }
+        canvas { border-radius: 50%; box-shadow: 0 0 25px rgba(255,255,255,0.1); background: #1e1e24; }
+        
+        .modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #1e1e24; border: 2px solid #a855f7; padding: 30px; border-radius: 16px; z-index: 100; box-shadow: 0 0 40px rgba(0,0,0,0.8); min-width: 300px; }
+        .modal h2 { margin-top: 0; color: #a855f7; font-size: 28px; }
+        .modal-buttons { display: flex; justify-content: center; gap: 15px; margin-top: 20px; }
+        .btn-eliminate { background: #ef4444; color: white; }
+        .btn-continue { background: #22c55e; color: white; }
 
-const app = express();
-const server = http.createServer(app);
+        .player-manager { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #1a1a1e; border: 1px solid #333; padding: 25px; border-radius: 16px; z-index: 90; width: 90%; max-width: 500px; max-height: 80vh; overflow-y: auto; }
+        .player-list-item { display: flex; justify-content: space-between; align-items: center; padding: 8px; border-bottom: 1px solid #333; }
+        .btn-del-user { background: none; color: #ef4444; padding: 5px 10px; font-size: 14px; }
+        .overlay { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:50; }
+        .status-badge { font-size: 18px; font-weight: bold; margin-bottom: 10px; padding: 5px 15px; border-radius: 20px; display: inline-block; }
+        .status-open { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
+        .status-closed { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+    </style>
+</head>
+<body>
 
-// فتح منافذ الأمان بالكامل لاستقبال حزم الأزرار أونلاين
-const io = new Server(server, {
-    cors: {
-        origin: "*",
-        methods: ["GET", "POST"]
+<div class="container">
+    <h1>🎯 قرعة البث المباشر (عجلة الحظ)</h1>
+    <div id="statusBadge" class="status-badge status-closed">التسجيل مغلق 🔴</div>
+
+    <div class="controls">
+        <button class="btn-open" onclick="toggleJoin(true)">🔓 فتح الانضمام</button>
+        <button class="btn-close" onclick="toggleJoin(false)">🔒 قفل الانضمام</button>
+        <button class="btn-view" onclick="openPlayerManager()">👥 عرض اللاعبين (<span id="userCount">0</span>)</button>
+    </div>
+
+    <div class="wheel-container">
+        <div class="pointer"></div>
+        <canvas id="wheelCanvas" width="450" height="450"></canvas>
+    </div>
+
+    <button class="btn-spin" id="spinBtn" onclick="spinWheel()">🔥 تدوير العجلة</button>
+</div>
+
+<div class="overlay" id="overlay"></div>
+<div class="modal" id="resultModal">
+    <p>الاسم الفائز:</p>
+    <h2 id="winnerName">احمد</h2>
+    <div class="modal-buttons">
+        <button class="btn-eliminate" onclick="eliminateWinner()">❌ إقصاء</button>
+        <button class="btn-continue" onclick="closeModal()">🔄 متابعة</button>
+    </div>
+</div>
+
+<div class="player-manager" id="managerModal">
+    <h3>👥 إدارة اللاعبين</h3>
+    <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+        <input type="text" id="manualInput" placeholder="أدخل اسم يدوياً..." style="flex:1; padding: 10px; border-radius: 6px; border: 1px solid #444; background: #222; color: #fff;">
+        <button class="btn-continue" style="padding: 10px;" onclick="addManualPlayer()">أضف</button>
+    </div>
+    <div id="playersListView"></div>
+    <br>
+    <button class="btn-close" style="width: 100%;" onclick="closePlayerManager()">إغلاق</button>
+</div>
+
+<script>
+    // الاتصال التلقائي بـ Render عبر النطاق الافتراضي للموقع
+    const socket = io();
+    let players = [];
+    let selectedWinner = "";
+    
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function playTickSound() {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(600, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.05);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.05);
     }
-});
 
-// ضع هنا اسم الحساب الذي ترغب بسحب بياناته (بدون علامة @)
-const TARGET_USERNAME = "a_7m_dz"; 
-
-let isJoinOpen = false; 
-const joinedUsers = new Set(); 
-
-// تقديم ملفات الواجهة الرسومية من مجلد public
-app.use(express.static(path.join(__dirname, 'public')));
-
-let tiktokConnection = new TikTokLiveConnection(TARGET_USERNAME, {
-    requestOptions: { timeout: 10000 },
-    websocketOptions: { timeout: 10000 }
-});
-
-// إدارة الاتصال وتبادل الأوامر مع لوحة تحكم المتصفح (WebSockets)
-io.on('connection', (socket) => {
-    // مزامنة فورية بمجرد تحميل الصفحة تضمن استجابة الشاشات والأزرار
-    socket.emit('syncState', { isJoinOpen, users: Array.from(joinedUsers) });
-
-    socket.on('toggleJoin', (status) => {
-        isJoinOpen = status;
-        io.emit('joinStatusChanged', isJoinOpen);
-        console.log(`[System]: وضع استقبال اللاعبين الآن: ${isJoinOpen ? 'مفتوح' : 'مغلق'}`);
+    socket.on('syncState', (state) => {
+        updateStatusUI(state.isJoinOpen);
+        players = state.users;
+        updatePlayersUI();
     });
 
-    socket.on('adminAddUser', (name) => {
-        if (name && !joinedUsers.has(name)) {
-            joinedUsers.add(name);
-            io.emit('updateUsers', Array.from(joinedUsers));
-        }
+    socket.on('joinStatusChanged', (status) => updateStatusUI(status));
+    socket.on('updateUsers', (usersList) => {
+        players = usersList;
+        updatePlayersUI();
     });
 
-    socket.on('adminRemoveUser', (name) => {
-        joinedUsers.delete(name);
-        io.emit('updateUsers', Array.from(joinedUsers));
-    });
+    function toggleJoin(isOpen) {
+        socket.emit('toggleJoin', isOpen);
+    }
 
-    socket.on('adminClearAll', () => {
-        joinedUsers.clear();
-        io.emit('updateUsers', Array.from(joinedUsers));
-    });
-});
-
-const processedMessages = new Set();
-
-// الاستماع لتعليقات بث تيك توك المباشر في الوقت الفعلي
-tiktokConnection.on('chat', (data) => {
-    if (!isJoinOpen) return; // تجاهل التعليقات إذا كان التسجيل مغلقاً في المتصفح
-
-    if (data) {
-        const msgId = data.msgId || (data.msg && data.msg.id);
-        if (msgId && processedMessages.has(msgId)) return;
-        if (msgId) processedMessages.add(msgId);
-
-        const username = data.uniqueId || (data.user && (data.user.displayId || data.user.uniqueId)) || 'unknown';
-        const nickname = data.nickname || (data.user && data.user.nickname) || 'unknown';
-        const comment = (data.comment || data.text || data.content || '').trim();
-
-        // فحص الكلمة المفتاحية "انضم"
-        if (comment === 'انضم' || comment.toLowerCase() === 'انضم') {
-            if (!joinedUsers.has(nickname)) {
-                joinedUsers.add(nickname);
-                console.log(`➕ لاعب جديد انضم للبث: ${nickname} (@${username})`);
-                io.emit('updateUsers', Array.from(joinedUsers));
-            }
+    function updateStatusUI(isOpen) {
+        const badge = document.getElementById('statusBadge');
+        if(isOpen) {
+            badge.innerText = "الانضمام مفتوح.. اكتب (انضم) الآن 🟢";
+            badge.className = "status-badge status-open";
+        } else {
+            badge.innerText = "التسجيل مغلق 🔴";
+            badge.className = "status-badge status-closed";
         }
     }
-});
 
-// إطلاق دالة الاتصال بالخلفية صامتة دون حظر الأزرار (Non-blocking)
-function runServer() {
-    console.log('🔄 جاري فحص حالة البث في الخلفية دون حظر خادم الويب...');
-    tiktokConnection.waitUntilLive(30)
-        .then(() => {
-            console.log('🚀 الحساب نشط الآن! جاري بدء الاتصال...');
-            return tiktokConnection.connect();
-        })
-        .then(() => {
-            console.log('✅ متصل بنجاح ببث تيك توك!');
-        })
-        .catch((err) => {
-            console.error('❌ تنبيه في الخلفية (سيتم إعادة المحاولة تلقائياً):', err.toString());
-            setTimeout(runServer, 30000);
-        });
-}
+    function updatePlayersUI() {
+        document.getElementById('userCount').innerText = players.length;
+        drawWheel();
+        const listView = document.getElementById('playersListView');
+        listView.innerHTML = players.map(p => `
+            <div class="player-list-item">
+                <span>${p}</span>
+                <button class="btn-del-user" onclick="removePlayer('${p}')">حذف</button>
+            </div>
+        `).join('');
+    }
 
-// تشغيل خادم الويب على المنفذ المتغير المعتمد لدى منصات الاستضافة (Render)
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-    console.log(`🚀 السيرفر يعمل وجاهز ومستقر تماماً على المنفذ: ${PORT}`);
-    runServer(); 
-});
+    function removePlayer(name) {
+        socket.emit('adminRemoveUser', name);
+    }
+
+    function addManualPlayer() {
+        const input = document.getElementById('manualInput');
+        if(input.value.trim()) {
+            socket.emit('adminAddUser', input.value.trim());
+            input.value = "";
+        }
+    }
+
+    function openPlayerManager() {
+        document.getElementById('managerModal').style.display = 'block';
+        document.getElementById('overlay').style.display = 'block';
+    }
+
+    function closePlayerManager() {
+        document.getElementById('managerModal').style.display = 'none';
+        document.getElementById('overlay').style.display = 'none';
+    }
+
+    const canvas = document.getElementById('wheelCanvas');
+    const ctx = canvas.getContext('2d');
+    let currentAngle = 0;
+
+    function drawWheel() {
+        const numSegments = players.length;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        if (numSegments === 0) {
+            ctx.fillStyle = "#333";
+            ctx.beginPath(); ctx.arc(225, 225, 200, 0, 2*Math.PI); ctx.fill();
+            ctx.fillStyle = "#fff"; ctx.font = "20px Arial"; ctx.textAlign = "center";
+            ctx.fillText("في انتظار انضمام اللاعبين...", 225, 225);
+            return;
+        }
+
+        const arcSize = (2 * Math.PI) / numSegments;
+        const colors = ["#a855f7", "#3b82f6", "#eab308", "#22c55e", "#ec4899", "#f97316"];
+
+        for (let i = 0; i < numSegments; i++) {
+            const angle = currentAngle + (i * arcSize);
+            ctx.fillStyle = colors[i % colors.length];
+            ctx.beginPath();
+            ctx.moveTo(225, 225);
+            ctx.arc(225, 225, 200, angle, angle + arcSize);
+            ctx.lineTo(225, 225);
+            ctx.fill();
+
+            ctx.save();
+            ctx.fillStyle = "#fff";
+            ctx.translate(225, 225);
+            ctx.rotate(angle + arcSize / 2);
+            ctx.font = "bold 16px Arial";
+            ctx.textAlign = "right";
+            ctx.fillText(players[i].substring(0, 12), 180, 5);
+            ctx.restore();
+        }
+    }
+
+    function spinWheel() {
+        if(players.length === 0) return;
+        document.getElementById('spinBtn').disabled = true;
+        const spinAngles = (Math.random() * 2000) + 2000; 
+        let duration = 4000; 
+        let startTimestamp = null;
+        const initialAngle = currentAngle;
+        let lastSegmentIndex = -1;
+
+        function animateSpin(timestamp) {
+            if (!startTimestamp) startTimestamp = timestamp;
+            const elapsed = timestamp - startTimestamp;
+            const progress = Math.min(elapsed / duration, 1);
+            const easeOut = 1 - Math.pow(1 - progress, 3);
+            currentAngle = initialAngle + (easeOut * (spinAngles * Math.PI / 180));
+            drawWheel();
+
+            const arcSize = (2 * Math.PI) / players.length;
+            let currentSegment = Math.floor((currentAngle % (2 * Math.PI)) / arcSize);
+            if(currentSegment !== lastSegmentIndex && progress < 0.9) {
+                playTickSound();
