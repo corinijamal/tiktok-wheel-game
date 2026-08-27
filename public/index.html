@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>عجلة حظ البث المباشر</title>
-    <!-- استدعاء مكتبة Socket.io من رابط CDN عالمي لضمان عمل الأزرار أونلاين -->
-    <script src="https://socket.io"></script>
+    <!-- تحميل مكتبة Socket.io من السيرفر نفسه (يوفرها socket.io تلقائياً على هذا المسار) -->
+    <script src="/socket.io/socket.io.js"></script>
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #121214; color: #fff; text-align: center; margin: 0; padding: 20px; }
         .container { display: flex; flex-direction: column; align-items: center; gap: 20px; max-width: 800px; margin: auto; }
@@ -75,8 +75,8 @@
     <button class="btn-close" style="width: 100%;" onclick="closePlayerManager()">إغلاق</button>
 </div>
 <script>
-    // الاتصال التلقائي بـ Render عبر النطاق الافتراضي للموقع
-    const socket = io("https://onrender.com", { transports: ['websocket', 'polling'], upgrade: false });
+    // الاتصال بنفس عنوان الصفحة الحالية (يعمل تلقائياً محلياً وبعد النشر على Render)
+    const socket = io({ transports: ['websocket', 'polling'] });
 
     let players = [];
     let selectedWinner = "";
