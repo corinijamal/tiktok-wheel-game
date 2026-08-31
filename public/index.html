@@ -128,7 +128,7 @@
         const listView = document.getElementById('playersListView');
         listView.innerHTML = players.map(p => `
             <div class="player-list-item">
-                <span>${p}</span>
+                <span style="color: #fff;">${p}</span>
                 <button class="btn-del-user" onclick="removePlayer('${p}')">حذف</button>
             </div>
         `).join('');
