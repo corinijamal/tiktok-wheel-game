@@ -32,6 +32,15 @@
         .status-badge { font-size: 18px; font-weight: bold; margin-bottom: 10px; padding: 5px 15px; border-radius: 20px; display: inline-block; }
         .status-open { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
         .status-closed { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+
+        .final-modal { border: 2px solid #eab308; box-shadow: 0 0 60px rgba(234, 179, 8, 0.6); text-align: center; }
+        .crown { font-size: 70px; animation: crownBounce 1s ease-in-out infinite; }
+        @keyframes crownBounce {
+            0%, 100% { transform: translateY(0) rotate(-8deg); }
+            50% { transform: translateY(-15px) rotate(8deg); }
+        }
+        .congrats-text { color: #eab308; font-size: 20px; font-weight: bold; margin: 10px 0 5px; }
+        #finalWinnerName { color: #fff; font-size: 32px; margin-top: 0; }
     </style>
 </head>
 <body>
@@ -61,6 +70,15 @@
     <div class="modal-buttons">
         <button class="btn-eliminate" onclick="eliminateWinner()">❌ إقصاء</button>
         <button class="btn-continue" onclick="closeModal()">🔄 متابعة</button>
+    </div>
+</div>
+
+<div class="modal final-modal" id="finalModal">
+    <div class="crown">👑</div>
+    <p class="congrats-text">مبارك للفائز</p>
+    <h2 id="finalWinnerName">احمد</h2>
+    <div class="modal-buttons">
+        <button class="btn-continue" onclick="closeFinalModal()">تم</button>
     </div>
 </div>
 
@@ -239,14 +257,45 @@
         document.getElementById('spinBtn').disabled = false;
     }
 
+    function playApplauseSound() {
+        const now = audioCtx.currentTime;
+        for (let i = 0; i < 25; i++) {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'square';
+            const start = now + Math.random() * 0.6;
+            osc.frequency.setValueAtTime(1500 + Math.random() * 2500, start);
+            gain.gain.setValueAtTime(0.06, start);
+            gain.gain.exponentialRampToValueAtTime(0.001, start + 0.08);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(start);
+            osc.stop(start + 0.08);
+        }
+    }
+
     function closeModal() {
         document.getElementById('resultModal').style.display = 'none';
         document.getElementById('overlay').style.display = 'none';
     }
 
     function eliminateWinner() {
+        const isLastPlayer = players.length === 2;
+        const lastRemainingName = players.find(p => p !== selectedWinner);
         removePlayer(selectedWinner);
         closeModal();
+
+        if (isLastPlayer && lastRemainingName) {
+            document.getElementById('finalWinnerName').innerText = lastRemainingName;
+            document.getElementById('finalModal').style.display = 'block';
+            document.getElementById('overlay').style.display = 'block';
+            playApplauseSound();
+        }
+    }
+
+    function closeFinalModal() {
+        document.getElementById('finalModal').style.display = 'none';
+        document.getElementById('overlay').style.display = 'none';
     }
 </script>
 </body>
