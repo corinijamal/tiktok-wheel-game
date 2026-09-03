@@ -222,10 +222,10 @@
             if (progress < 1) {
                 requestAnimationFrame(animateSpin);
             } else {
-                let normalizedAngle = (currentAngle - (Math.PI / 2)) % (2 * Math.PI);
+                let normalizedAngle = (currentAngle + (Math.PI / 2)) % (2 * Math.PI);
                 if (normalizedAngle < 0) normalizedAngle += 2 * Math.PI;
-                const winnerIndex = players.length - 1 - Math.floor(normalizedAngle / arcSize);
-                selectedWinner = players[winnerIndex % players.length];
+                const winnerIndex = Math.floor(normalizedAngle / arcSize) % players.length;
+                selectedWinner = players[players.length - 1 - winnerIndex];
                 showWinner(selectedWinner);
             }
         }
